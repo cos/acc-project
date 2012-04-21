@@ -1,0 +1,46 @@
+INSTRUCTIONS FOR COMPILING AND RUNNING YOUR -scalarrepl-$USER PASS
+
+1. Download and build LLVM, as instructed in the MP1 handout.
+   The remainder of this file assumes that $LLVMROOT is the
+   root llvm directory.
+
+2. Download mp1.tar from the course Project page.  Unpack it (anywhere)
+   and rename {\tt mp1/lib/ScalarReplAggregates-skeleton.cpp} to 
+   {\tt mp1/lib/ScalarReplAggregates-$USER.cpp}, where $USER is your
+   campus netid.
+
+3. Enter mp1/ and run:
+       ./configure --with-llvmsrc=/Users/cos/Projects/cs526/llvm--with-llvmobj=/Users/cos/Projects/cs526/llvm
+   This should create the Makefiles you need to compile your pass.
+
+4. Enter mp1/lib and run:
+       make
+   This will compile the ScalarReplAggregates-$USER.cpp file, creating
+   a dynamically loadable shared library in {\tt mp1/Debug+Asserts/lib/}.
+   The name of the library is OS-dependent, but on Linux, it will be
+   called libMP1.so.
+
+   Test that this step was successful by running:
+   	opt -load ../Debug+Asserts/lib/libMP1.so --help
+   (Replace "libMP1.so" with the name of the shared library on your
+   system, if necessary.)
+   You should see your pass listed along with the rest of the optimization
+   passes.
+
+5. Enter mp1/test and edit the Makefile to replace the variables LLVMROOT,
+   LLVMGCC and DYLIB, as appropriate.  Then, run either of these:
+       make trivial.llvm.bc
+       make debug
+   
+   The first will compile trivial.c with no optimzation, showing you the
+   unoptimized LLVM code with a simple use of a structure.
+   
+   The second will compile trivial.c into trivial.debug.bc, running a few
+   preprocessing optimizations, and then your pass.  At present, your pass
+   is empty and the uses of the local struct will remain in the code.
+   As you add code to your pass, you can use "make debug" to see the
+   effect of the pass.
+
+   In the near future, I'll provide a longer list of optimizations that
+   you can use to test your pass, and to compare your transformation against
+   the one in LLVM.
