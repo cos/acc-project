@@ -1,57 +1,37 @@
 LEVEL = ..
 
 ## change or use make TARGET=inputfilename
-TARGET=trivial
 
 include ./Makefile.common
 
 ## Other choices: test or comparecfe (these will be provided later)
-default: clean debug
-DEBUGOPTS = ## -verify -inline -mem2reg -simplifycfg -mem2reg -globalopt -globaldce -instcombine -adce -instcombine -simplifycfg
+default: clean test
+TESTOPTS = -verify -indvars
 
-all: clean debug_all
+all: clean test_all
 SRCS=$(wildcard *.c)
+
 DBGS=$(SRCS:.c=.diff)
-debug_all: $(DBGS)
-
-testsimple: debug
-
-debug: $(TARGET).debug.bc
-
-test: $(TARGET).test.bc
-
-oracle: $(TARGET).oracle.bc
-
-compare: $(TARGET).debug.ll $(TARGET).oracle.ll 
-	diffmerge $^
-
-comparecfe:$(TARGET).comparecfe.bc
-
+test_all: $(DBGS)
 
 .PRECIOUS: %.ll
 
-%.diff : %.debug.ll %.oracle.ll
+%.diff : %.test.ll %.expected.ll
 	$(if $(shell diff diff -I 'ModuleID' $^) , diffmerge $^ , echo OK)
 
 %.ll: %.bc
 	$(LLVMDIS) -f $<
-
-
+	
 %.llvm.bc: %.c
-	$(LLVMGCC) -S -emit-llvm -o - $< | $(LLVMAS) > $@
+	$(LLVMGCC) -S -emit-llvm -o - $< | $(LLVMAS) > $@	
 
-
-%.debug.bc: %.llvm.bc
-	$(LLVMOPT) $(DEBUGOPTS) < $< | \
-	$(LLVMOPT) -load $(DYLIB) -scalarrepl-cos -dce > $@
-
-%.oracle.bc: %.llvm.bc
-	$(LLVMOPT) $(DEBUGOPTS) < $< | \
-	$(LLVMOPT) -load $(DYLIB) -scalarrepl -dce > $@
+%.test.bc: %.llvm.bc
+	$(LLVMOPT) $(TESTOPTS) < $< | \
+	$(LLVMOPT) -load $(DYLIB) -loop-to-gpu > $@
 
 %.original.bc: %.llvm.bc
-	$(LLVMOPT) $(DEBUGOPTS) < $< | \
+	$(LLVMOPT) $(TESTOPTS) < $< | \
 	$(LLVMOPT) -load $(DYLIB) > $@
 
 clean:
-	$(RM) -f *.debug.bc *.test.bc *.llvm.bc *.comparecfe.bc *.diff *.ll *.oracle.bc
+	$(RM) -f *.bc *.diff *.test.ll *.original.ll
