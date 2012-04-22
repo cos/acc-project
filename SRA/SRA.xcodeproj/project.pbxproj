@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
+		8B2BED2B1544AEEA00C6BB6A /* Makefile.common */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Makefile.common; sourceTree = "<group>"; };
 		8BBF12E914F170590076A38F /* t1.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = t1.c; sourceTree = "<group>"; };
 		8BBF12EA14F170590076A38F /* t2.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = t2.c; sourceTree = "<group>"; };
 		8BC6000014EF4C7500F210B2 /* vec_set-6.ll */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.asm.llvm; path = "vec_set-6.ll"; sourceTree = "<group>"; };
@@ -16237,6 +16238,7 @@
 				8BC6E0B914EF4C1B00F210B2 /* trivial.c */,
 				8BC6E0BA14EF4C1B00F210B2 /* trivial.debug.bc */,
 				8BC6E0BB14EF4C1B00F210B2 /* trivial.llvm.bc */,
+				8B2BED2B1544AEEA00C6BB6A /* Makefile.common */,
 			);
 			path = test;
 			sourceTree = "<group>";

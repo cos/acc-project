@@ -3,16 +3,7 @@ LEVEL = ..
 ## change or use make TARGET=inputfilename
 TARGET=trivial
 
-## replace LLVMROOT and LLVMGCC as appropriate
-NETID = `cos`
-LLVMROOT = /Users/cos/Projects/cs526/llvm
-LLVMGCC = clang
-LLVMAS  = $(LLVMROOT)/Debug+Asserts/bin/llvm-as
-LLVMDIS = $(LLVMROOT)/Debug+Asserts/bin/llvm-dis
-LLVMOPT = $(LLVMROOT)/Debug+Asserts/bin/opt
-
-## change library name appropriately for your system
-DYLIB   = /Users/cos/Projects/cs526/mp1/Debug+Asserts/lib/MP1.dylib
+include ./Makefile.common
 
 ## Other choices: test or comparecfe (these will be provided later)
 default: clean debug
