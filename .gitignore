@@ -7,3 +7,5 @@ Debug+Asserts
 lib/Debug+Asserts
 SRA
 *.bc
+Makefile.common
+test/Makefile.common
