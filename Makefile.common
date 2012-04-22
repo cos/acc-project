@@ -3,14 +3,14 @@ PROJECT_NAME := sample
 PROJ_VERSION := 0.9
  
 # Set this variable to the top of the LLVM source tree.
-LLVM_SRC_ROOT = /Users/cos/Projects/cs526/llvm
+LLVM_SRC_ROOT = /Users/semih/code/llvm
 
 # Set this variable to the top level directory where LLVM was built
 # (this is *not* the same as OBJ_ROOT as defined in LLVM's Makefile.config).
-LLVM_OBJ_ROOT = /Users/cos/Projects/cs526/llvm
+LLVM_OBJ_ROOT = /Users/semih/code/llvm
 
 # Set the directory root of this project's source files
-PROJ_SRC_ROOT := $(subst //,/,/Users/cos/Projects/cs526/mp1)
+PROJ_SRC_ROOT := $(subst //,/,/Users/semih/code/llvm-pass/acc-project)
 
 # Set the root directory of this project's object files
 PROJ_OBJ_ROOT := $(subst //,/,@abs_top_objdir@)
