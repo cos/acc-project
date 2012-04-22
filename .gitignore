@@ -3,4 +3,7 @@
 
 .project
 
-SRA/
+Debug+Asserts
+lib/Debug+Asserts
+SRA
+*.bc
