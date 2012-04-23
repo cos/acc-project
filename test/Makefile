@@ -24,6 +24,9 @@ test_all: $(DBGS)
 	
 %.llvm.bc: %.c
 	$(LLVMGCC) -S -emit-llvm -o - $< | $(LLVMAS) > $@	
+	
+%.llvm.bc: %.cpp
+	$(LLVMGCC) -S -emit-llvm -o - $< | $(LLVMAS) > $@	
 
 %.test.bc: %.llvm.bc
 	$(LLVMOPT) $(TESTOPTS) < $< | \
@@ -34,4 +37,5 @@ test_all: $(DBGS)
 	$(LLVMOPT) -load $(DYLIB) > $@
 
 clean:
-	$(RM) -f *.bc *.diff *.test.ll *.original.ll
+	$(RM) -f *.bc *.diff *.test.ll *.original.ll *.llvm.ll
+
