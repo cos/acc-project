@@ -23,6 +23,10 @@
 #include "llvm/Transforms/Utils/UnrollLoop.h"
 #include "llvm/Target/TargetData.h"
 #include <climits>
+#include "llvm/Support/IRReader.h"
+#include "llvm/LLVMContext.h"
+#include "llvm/Module.h"
+
 
 using namespace llvm;
 
@@ -61,13 +65,32 @@ static RegisterPass<LoopToGPU> X("loop-to-gpu",
                             "Transform loop to GPU kernel");
 
 
-
-
 bool LoopToGPU::runOnLoop(Loop *L, LPPassManager &LPM) {
-  LoopInfo *LI = &getAnalysis<LoopInfo>();
-  ScalarEvolution *SE = &getAnalysis<ScalarEvolution>();
+	
+	BasicBlock *Header = L->getHeader();
+	errs() << "The loop: F[" << Header->getParent()->getName() << "] Loop %" << Header->getName() << "\n";
 	
 	
+	SMDiagnostic Err;
 	
-  return true;
+	LLVMContext &Context = getGlobalContext();
+	
+	Module* myMod = llvm::ParseIRFile("../gpu.original.ll", Err, Context);
+	
+	if (!myMod) {
+		Err.print("blabla", errs());
+		return 1;
+	}
+	
+	for (Module::iterator F = myMod->begin(), e = myMod->end(); F != e; ++F) {
+		for (Function::iterator B = F->begin(), FE = F->end(); B != FE; ++B) {
+			BasicBlock *Header = L->getHeader();
+			for (BasicBlock::iterator I = B->begin(), BE = B->end(); I != BE; I++) {
+				errs() << *B;
+				Header->getInstList().push_back(I);
+			}
+		}
+	}
+	
+  return false;
 }

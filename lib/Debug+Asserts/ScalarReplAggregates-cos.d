@@ -5,7 +5,7 @@
   /Users/cos/Projects/cs526/llvm/include/llvm/DerivedTypes.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/Type.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/Support/Casting.h \
-  /Users/cos/Projects/cs526/llvm/include/llvm/Support/DataTypes.h \
+  /Users/cos/Projects/cs526/llvm-build/include/llvm/Support/DataTypes.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/Function.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/GlobalValue.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/Constant.h \
@@ -13,6 +13,7 @@
   /Users/cos/Projects/cs526/llvm/include/llvm/Support/ErrorHandling.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/Support/Compiler.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/ADT/StringRef.h \
+  /Users/cos/Projects/cs526/llvm/include/llvm/Support/type_traits.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/Value.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/Use.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/ADT/PointerIntPair.h \
@@ -23,7 +24,6 @@
   /Users/cos/Projects/cs526/llvm/include/llvm/ADT/ilist_node.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/Support/DebugLoc.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/ADT/DenseMapInfo.h \
-  /Users/cos/Projects/cs526/llvm/include/llvm/Support/type_traits.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/Instruction.def \
   /Users/cos/Projects/cs526/llvm/include/llvm/SymbolTableListTraits.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/ADT/ilist.h \
@@ -50,7 +50,7 @@
   /Users/cos/Projects/cs526/llvm/include/llvm/InitializePasses.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/Support/Atomic.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/Support/Valgrind.h \
-  /Users/cos/Projects/cs526/llvm/include/llvm/Config/llvm-config.h \
+  /Users/cos/Projects/cs526/llvm-build/include/llvm/Config/llvm-config.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/PassAnalysisSupport.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/Analysis/Dominators.h \
   /Users/cos/Projects/cs526/llvm/include/llvm/ADT/DenseMap.h \
@@ -77,7 +77,7 @@
 
 /Users/cos/Projects/cs526/llvm/include/llvm/Support/Casting.h:
 
-/Users/cos/Projects/cs526/llvm/include/llvm/Support/DataTypes.h:
+/Users/cos/Projects/cs526/llvm-build/include/llvm/Support/DataTypes.h:
 
 /Users/cos/Projects/cs526/llvm/include/llvm/Function.h:
 
@@ -92,6 +92,8 @@
 /Users/cos/Projects/cs526/llvm/include/llvm/Support/Compiler.h:
 
 /Users/cos/Projects/cs526/llvm/include/llvm/ADT/StringRef.h:
+
+/Users/cos/Projects/cs526/llvm/include/llvm/Support/type_traits.h:
 
 /Users/cos/Projects/cs526/llvm/include/llvm/Value.h:
 
@@ -112,8 +114,6 @@
 /Users/cos/Projects/cs526/llvm/include/llvm/Support/DebugLoc.h:
 
 /Users/cos/Projects/cs526/llvm/include/llvm/ADT/DenseMapInfo.h:
-
-/Users/cos/Projects/cs526/llvm/include/llvm/Support/type_traits.h:
 
 /Users/cos/Projects/cs526/llvm/include/llvm/Instruction.def:
 
@@ -167,7 +167,7 @@
 
 /Users/cos/Projects/cs526/llvm/include/llvm/Support/Valgrind.h:
 
-/Users/cos/Projects/cs526/llvm/include/llvm/Config/llvm-config.h:
+/Users/cos/Projects/cs526/llvm-build/include/llvm/Config/llvm-config.h:
 
 /Users/cos/Projects/cs526/llvm/include/llvm/PassAnalysisSupport.h:
 
