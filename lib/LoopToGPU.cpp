@@ -119,3 +119,8 @@ bool LoopToGPU::runOnLoop(Loop *L, LPPassManager &LPM) {
 	
   return false;
 }
+
+// GlobalVariables cannot be added to another module because they are already in one
+// .setParent is private and cannot be used to change the parent of a GlobalVariable
+// .clone doesn't work on GlobalVariable
+
