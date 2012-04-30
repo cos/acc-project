@@ -36,6 +36,8 @@ test_all: $(DBGS)
 	$(LLVMOPT) $(TESTOPTS) < $< | \
 	$(LLVMOPT) -load $(DYLIB) > $@
 
+
+
 clean:
 	$(RM) -f *.bc *.diff *.test.ll *.original.ll *.llvm.ll
 
