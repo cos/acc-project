@@ -40,4 +40,3 @@ test_all: $(DBGS)
 
 clean:
 	$(RM) -f *.bc *.diff *.test.ll *.original.ll *.llvm.ll
-
