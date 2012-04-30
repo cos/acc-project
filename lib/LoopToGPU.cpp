@@ -67,9 +67,12 @@ static RegisterPass<LoopToGPU> X("loop-to-gpu",
 
 bool LoopToGPU::runOnLoop(Loop *L, LPPassManager &LPM) {
 	
-	BasicBlock *Header = L->getHeader();
-	errs() << "The loop: F[" << Header->getParent()->getName() << "] Loop %" << Header->getName() << "\n";
+	BasicBlock *theHeader = L->getHeader();
+	errs() << "The loop: F[" << theHeader->getParent()->getName() << "] Loop %" << theHeader->getName() << "\n";
+	Function *theF = theHeader->getParent();
+	Module *theM = theF->getParent();
 	
+
 	
 	SMDiagnostic Err;
 	
@@ -82,15 +85,42 @@ bool LoopToGPU::runOnLoop(Loop *L, LPPassManager &LPM) {
 		return 1;
 	}
 	
-	for (Module::iterator F = myMod->begin(), e = myMod->end(); F != e; ++F) {
-		for (Function::iterator B = F->begin(), FE = F->end(); B != FE; ++B) {
-			BasicBlock *Header = L->getHeader();
-			for (BasicBlock::iterator I = B->begin(), BE = B->end(); I != BE; I++) {
-				errs() << *B;
-				Header->getInstList().push_back(I);
+	for(Module::global_iterator V = myMod->global_begin(), VE = myMod->global_end(); V != VE; ++V) {
+		bool isNew = true;
+		for(Module::global_iterator V1 = theM->global_begin(), VE1 = theM->global_end(); V1 != VE1; ++V1) {
+			errs() << "Name: " << V->getName()<<"\n";
+			if(V->getName().compare(V1->getName())==0) {
+				errs() << "WE ARE HERE, AT: " << V->getName();
+				isNew = false;
 			}
+			
+			
+//			if(V1.getParent()==0) 
+//				isNew = false
+			
+		}
+		if(isNew) {
+			theM->getGlobalList().push_back(V->clone());
 		}
 	}
 	
+//	for (Module::iterator F = myMod->begin(), e = myMod->end(); F != e; ++F) {
+		
+		
+		
+//		for (Function::iterator B = F->begin(), FE = F->end(); B != FE; ++B) {
+//			BasicBlock *Header = L->getHeader();
+//			for (BasicBlock::iterator I = B->begin(), BE = B->end(); I != BE; I++) {
+////				errs() << *B;
+//				Header->getInstList().push_back(I);
+//			}
+//		}
+//	}
+	
   return false;
 }
+
+// GlobalVariables cannot be added to another module because they are already in one
+// .setParent is private and cannot be used to change the parent of a GlobalVariable
+// .clone doesn't work on GlobalVariable
+
