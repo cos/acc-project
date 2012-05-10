@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <OpenCL/opencl.h>
+#include <CL/opencl.h>
 
 #define SIZE (1024000)
 
@@ -23,22 +23,25 @@ int main(int argc, char** argv)
 
     size_t global;                      // global domain size for our calculation
     size_t local;                       // local domain size for our calculation
-    cl_int err;                            // error code returned from api calls
-    cl_device_id device_id;             // compute device id 
-    cl_context context;                 // compute context
-    cl_command_queue commands;          // compute command queue
-    cl_program program;                 // compute program
-    cl_kernel kernel;                   // compute kernel
-    cl_mem input;                       // device memory used for the input array
-    cl_mem output;                      // device memory used for the output array
+    cl_int err,status;   
+    cl_uint platforms;                         
+    cl_platform_id platform;
+    cl_device_id device_id;             
+    cl_context context;                 
+    cl_command_queue commands;          
+    cl_program program;                 
+    cl_kernel kernel;                   
+    cl_mem input;                       
+    cl_mem output;                      
     
 
     int i = 0;
     unsigned int count = SIZE;
     
     // Connect to a compute device
-	
-    err = clGetDeviceIDs(NULL, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL);
+
+    err = clGetPlatformIDs(1, &platform, &platforms);
+    err = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL);
 //    if (err != CL_SUCCESS)
 //    {
 //        printf("Error: Failed to create a device group!\n");
@@ -65,26 +68,21 @@ int main(int argc, char** argv)
 
    
 
-  // 6. Load and build OpenCL kernel
- 
-   // Open the ptx file and load it
-   // into a char* buffer
-   FILE* fp = fopen("kernel.ll", "r");
+
+   FILE* fp = fopen("kernel.ptx", "r");
 //    if (!fp) {
 //        fprintf(stderr, "Failed to load kernel.\n");
 //        exit(1);
 //    }
 
-//   fseek (fp , 0 , SEEK_END);
+   fseek (fp , 0 , SEEK_END);
    const size_t lSize = ftell(fp);
-//   rewind(fp);
+   rewind(fp);
    unsigned char* buffer;
-//   buffer = (unsigned char*) malloc (lSize);
-//   fread(buffer, 1, lSize, fp);
-//   fclose(fp);
+   buffer = (unsigned char*) malloc (lSize);
+   fread(buffer, 1, lSize, fp);
+   fclose(fp);
  
-
-   cl_int status;
    program = clCreateProgramWithBinary(context, 
                 1, (const cl_device_id *)&device_id, 
                 &lSize, (const unsigned char**)&buffer, 
@@ -131,11 +129,11 @@ int main(int argc, char** argv)
     err  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &input);
     err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &output);
     err |= clSetKernelArg(kernel, 2, sizeof(unsigned int), &count);
-    if (err != CL_SUCCESS)
-    {
-        printf("Error: Failed to set kernel arguments! %d\n", err);
-        exit(1);
-    }
+//    if (err != CL_SUCCESS)
+//    {
+//        printf("Error: Failed to set kernel arguments! %d\n", err);
+//        exit(1);
+//    }
 
     // Get the maximum work group size for executing the kernel on the device
     //
@@ -181,7 +179,7 @@ int main(int argc, char** argv)
     clReleaseContext(context);
 
 
-     printf("Computed");
+     printf("Computed\n");
 
     return 0;
 }

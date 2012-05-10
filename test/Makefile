@@ -31,6 +31,7 @@ test_all: $(DBGS)
 %.test.bc: %.llvm.bc
 	$(LLVMOPT) $(TESTOPTS) < $< | \
 	$(LLVMOPT) -load $(DYLIB) -loop-to-gpu > $@
+	$(LLVMDIS) -f $@
 
 %.original.bc: %.llvm.bc
 	$(LLVMOPT) $(TESTOPTS) < $< | \
