@@ -1,6 +1,6 @@
-; ModuleID = 'gpu.cpp'
-target datalayout = "e-p:32:32:32-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:32:64-f32:32:32-f64:32:64-v64:64:64-v128:128:128-a0:0:64-f80:32:32-n8:16:32-S128"
-target triple = "i386-pc-linux-gnu"
+; ModuleID = 't1.test.bc'
+target datalayout = "e-p:32:32:32-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:32:64-f32:32:32-f64:32:64-v64:64:64-v128:128:128-a0:0:64-f80:128:128-n8:16:32-S128"
+target triple = "i386-apple-macosx10.7.0"
 
 %struct._cl_platform_id = type opaque
 %struct._cl_device_id = type opaque
@@ -18,13 +18,15 @@ target triple = "i386-pc-linux-gnu"
 @.str2 = private unnamed_addr constant [7 x i8] c"kernel\00", align 1
 @.str3 = private unnamed_addr constant [13 x i8] c"GPU is done\0A\00", align 1
 
-define i32 @main(i32 %argc, i8** %argv) {
+define i32 @main(i32 %argc, i8** %argv) nounwind ssp {
 entry:
   %retval = alloca i32, align 4
   %argc.addr = alloca i32, align 4
   %argv.addr = alloca i8**, align 4
   %size = alloca i32, align 4
   %saved_stack = alloca i8*
+  %runOnGPU = alloca i8, align 1
+  %i = alloca i32, align 4
   %cleanup.dest.slot = alloca i32
   store i32 0, i32* %retval
   store i32 %argc, i32* %argc.addr, align 4
@@ -36,7 +38,9 @@ entry:
   %vla = alloca float, i32 %0, align 4
   %2 = load i32* %size, align 4
   %vla1 = alloca float, i32 %2, align 4
-  %3 = load i32* %size, align 4
+  store i8 1, i8* %runOnGPU, align 1
+  store i32 0, i32* %i, align 4
+  %3 = load i32* %size
   call void @_Z3gpuPfS_i(float* %vla, float* %vla1, i32 %3)
   store i32 0, i32* %retval
   store i32 1, i32* %cleanup.dest.slot
@@ -47,6 +51,10 @@ entry:
 }
 
 declare i8* @llvm.stacksave() nounwind
+
+declare void @llvm.stackrestore(i8*) nounwind
+
+declare i8* @llvm.stacksave1() nounwind
 
 define void @_Z3gpuPfS_i(float* %data, float* %results, i32 %size) {
 entry:
@@ -176,7 +184,7 @@ entry:
   ret void
 }
 
-declare void @llvm.stackrestore(i8*) nounwind
+declare void @llvm.stackrestore2(i8*) nounwind
 
 declare i32 @clGetPlatformIDs(i32, %struct._cl_platform_id**, i32*)
 

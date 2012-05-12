@@ -8,21 +8,19 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-
-
+// test changing variable names and order
 
 int main(int argc, char** argv)
 {
     int size= 1024000;
-    float data[size];                     // original data set given to device
-    float results[size];
+		float another[size];
+    float some[size];                     // original data set given to device
 
     bool runOnGPU = true;
     for(int i=0; i< size; i++)
     {
-      results[i]= data[i]*data[i];
+      another[i]= some[i]*some[i];
     }
     
     return 0;
 }
-

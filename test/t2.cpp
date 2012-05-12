@@ -9,7 +9,7 @@
 #include <sys/stat.h>
 
 
-
+// check another operation
 
 int main(int argc, char** argv)
 {
@@ -20,7 +20,7 @@ int main(int argc, char** argv)
     bool runOnGPU = true;
     for(int i=0; i< size; i++)
     {
-      results[i]= data[i]*data[i];
+      results[i]= data[i]+data[i];
     }
     
     return 0;

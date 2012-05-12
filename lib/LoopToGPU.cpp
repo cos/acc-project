@@ -27,6 +27,12 @@
 #include "llvm/LLVMContext.h"
 #include "llvm/Module.h"
 #include "llvm/Transforms/Utils/ValueMapper.h"
+#include "llvm/Transforms/Utils/Cloning.h"
+#include "llvm/Support/InstIterator.h"
+#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/Support/raw_ostream.h"
+
 
 using namespace llvm;
 
@@ -66,18 +72,24 @@ static RegisterPass<LoopToGPU> X("loop-to-gpu",
 
 
 bool LoopToGPU::runOnLoop(Loop *L, LPPassManager &LPM) {
-	
+
 	BasicBlock *theHeader = L->getHeader();
-	errs() << "The loop: F[" << theHeader->getParent()->getName() << "] Loop %" << theHeader->getName() << "\n";
+//	errs() << "The loop: F[" << theHeader->getParent()->getName() << "] Loop %" << theHeader->getName() << "\n";
 	Function *hostFunction = theHeader->getParent();
-	Module *hostModule = hostFunction->getParent();
+	Module *hostModule = hostFunction->getParent(); errs() << *hostModule;
 	SMDiagnostic Err;
 	LLVMContext &Context = getGlobalContext();
 	Module* originalModule = llvm::ParseIRFile("../gpu.original.ll", Err, Context);
 	if (!originalModule) {
-		Err.print("load problem: ", errs());
+//		Err.print("load problem: ", errs());
 		return 1;
 	}
+	
+	//
+	// MODULE-LEVEL CLONING
+	//
+	// adapted from CloneModule.cpp
+	//
 	
 	Module *New = hostModule;
 	Module *M = originalModule;
@@ -104,13 +116,25 @@ bool LoopToGPU::runOnLoop(Loop *L, LPPassManager &LPM) {
     VMap[I] = GV;
   }
 	
+	Function *originalMain;
+	
+	Function *gpuFunction;
+	
 	// Loop over the functions in the module, making external functions as before
   for (Module::const_iterator I = M->begin(), E = M->end(); I != E; ++I) {
+		if(I->getName() == "main") {
+			originalMain = &cast<Function>(*I);
+		} else
+		{
     Function *NF =
 		Function::Create(cast<FunctionType>(I->getType()->getElementType()),
 										 I->getLinkage(), I->getName(), New);
     NF->copyAttributesFrom(I);
+			if(NF->getName().find("gpu") < NF->getName().size()) 
+				gpuFunction = NF;
+
     VMap[I] = NF;
+		}
   }
 
 	
@@ -134,79 +158,271 @@ bool LoopToGPU::runOnLoop(Loop *L, LPPassManager &LPM) {
       GV->setInitializer(MapValue(I->getInitializer(), VMap));
   }
 	
-  return false;
-}
+	// Similarly, copy over function bodies now...
+  //
+  for (Module::const_iterator I = M->begin(), E = M->end(); I != E; ++I) {
+		if(I->getName() != "main") {
+			Function *F = cast<Function>(VMap[I]);
+			if (!I->isDeclaration()) {
+				Function::arg_iterator DestI = F->arg_begin();
+				for (Function::const_arg_iterator J = I->arg_begin(); J != I->arg_end();
+						 ++J) {
+					DestI->setName(J->getName());
+					VMap[J] = DestI++;
+				}
+				
+				SmallVector<ReturnInst*, 8> Returns;  // Ignore returns cloned.
+				CloneFunctionInto(F, I, VMap, /*ModuleLevelChanges=*/true, Returns);
+			}
+		}
+	}
+	
+//	errs() << *hostModule;
+	
+	//
+	// END MODULE-LEVEL CLONING
+	//
+	
+	//
+	// START ADAPT HOST FUNCTION
+	//
+	
+	L->getExitBlock()->moveBefore(L->getHeader());
+																			
+	BasicBlock *forCond, *forBody, *forInc, *forEnd;
 
-
-//SMDiagnostic Err;
-//
-//LLVMContext &Context = getGlobalContext();
-//
-//Module* myMod = llvm::ParseIRFile("../gpu.original.ll", Err, Context);
-//
-//if (!myMod) {
-//	Err.print("blabla", errs());
-//	return 1;
-//}
-//
-//GlobalVariable *tmp;
-//GlobalVariable *tmp2;
-//for(Module::global_iterator V = myMod->global_begin(), VE = myMod->global_end(); V != VE; ++V) {
-//	bool isNew = true;
-//	for(Module::global_iterator V1 = theM->global_begin(), VE1 = theM->global_end(); V1 != VE1; ++V1) {
-//		//errs() << "Name: " << V->getName()<<  "  " << V1->getName() <<"\n";
-//		
-//		if(V->getName().compare(V1->getName())==0) {
-//			//errs() << "WE ARE HERE, AT: " << V1->getName();
-//			tmp2= V;
-//			isNew = false;
+	forEnd = L->getExitBlock();
+	for (Function::iterator i = hostFunction->begin(), e = hostFunction->end(); i != e; ++i) {
+		// Print out the name of the basic block if it has one, and then the
+		// number of instructions that it contains
+		if(L->contains(i)) {
+			if(i->getName() == "for.cond") 
+				forCond = i;
+			if(i->getName() == "for.body") 
+				forBody = i;
+			if(i->getName() == "for.inc") 
+				forInc = i;			
+		}
+	}
+	
+	L->getExitBlock()->removePredecessor(forCond);
+	
+	// get the iterator and size values from the host function
+	BasicBlock::iterator i = forCond->begin();	
+	Value *iteratorValue = i->getOperand(0);
+	++i;
+	Value *sizeValue = i->getOperand(0);	
+	
+	// get the values withing the loop that have been initialized outside of it
+	std::vector<Value*> forInData;
+	for (BasicBlock::iterator i = forBody->begin(), e = forBody->end(); i != e; ++i) {
+		for (User::op_iterator v = i->op_begin(), ve = i->op_end(); v != ve; ++v) {
+			
+			if(Instruction *vi = dyn_cast<Instruction>(*v))
+				if(!L->contains(vi->getParent()) && vi != iteratorValue) {
+					forInData.push_back(vi);
+				}
+		}
+	}
+	
+	std::sort(forInData.begin(), forInData.end());
+	std::vector<Value*>::iterator new_end = std::unique(forInData.begin(), forInData.end()); 
+	std::vector<Value*> forInDataUnique;
+	for (std::vector<Value*>::iterator it = forInData.begin(); it != new_end; ++it)
+	{
+		forInDataUnique.push_back(cast<Instruction>(*it));
+//		errs() << *cast<Instruction>(*it) << '\n';
+	}
+	
+	Instruction *oldTerminator = L->getLoopPredecessor()->getTerminator();
+	
+	LoadInst *loadForSize = new LoadInst(sizeValue, "", oldTerminator);	
+	forInDataUnique.push_back(loadForSize);
+	
+//	for (std::vector<Value*>::iterator it = forInDataUnique.begin(); it != forInDataUnique.end(); ++it)
+//	{
+//		errs() << *cast<Instruction>(*it) << '\n';
+//	}
+	
+//	
+//		for (Function::iterator i = gpuFunction->begin(), e = gpuFunction->end(); i != e; ++i) {
+//			// Print out the name of the basic block if it has one, and then the
+//			// number of instructions that it contains
+//					errs() << "Basic block (name=" << i->getName() << ") has "
+//					<< i->size() << " instructions." << " : \n" << *i << "\n";
 //		}
-//		
-//		//			if(V1.getParent()==0) 
-//		//				isNew = false
-//		
+	
+//	CallInst *callGpuInstr = 
+	CallInst::Create(gpuFunction, forInDataUnique, "", oldTerminator);
+	
+	for (BasicBlock::iterator i = L->getExitBlock()->begin(), e = L->getExitBlock()->end(); i != e;) {
+			// The next statement works since operator<<(ostream&,...)
+			// is overloaded for Instruction&
+		Instruction* I = i;
+		i++;
+		I->removeFromParent();
+//					errs() << *I << "\n";
+		I->insertBefore(oldTerminator);
+	}
+	
+	oldTerminator->eraseFromParent();
+	
+//
+// END ADAPT HOST FUNCTION
+// 
+	
+//
+// GENERATE THE KERNEL
+//
+	
+	Module* kernelModule = llvm::ParseIRFile("../kernel.ll", Err, Context);
+	if (!kernelModule) {
+		Err.print("load problem: ", errs());
+		return 1;
+	}
+
+	Function *kernelFunction = kernelModule->getFunction("kernel");
+	Instruction *kernelTerminator = kernelFunction->back().getTerminator();
+	
+	Instruction *kernelI = kernelTerminator->getPrevNode();
+	
+	ValueToValueMapTy KVMap;	
+	
+	for (BasicBlock::iterator I = forBody->begin(), e = forBody->end(); I != e; ++I) {
+		if(dyn_cast<TerminatorInst>(I))
+			continue;
+		Instruction *ourI = I->clone();
+		
+		if (I->hasName())
+			ourI->setName(I->getName());
+		ourI->insertBefore(kernelTerminator);		
+		KVMap[&(cast<Instruction>(*I))] = ourI;                // Add instruction map to value.
+	}
+	
+	KVMap[iteratorValue] = kernelI; // map "i" to "add.i"
+	llvm::Function::arg_iterator arguments = kernelFunction->arg_begin();
+	KVMap[forInDataUnique[0]] = arguments++;
+	KVMap[forInDataUnique[1]] = arguments;
+	
+	for (BasicBlock::iterator II = kernelFunction->back().begin(), e = kernelFunction->back().end(); II != e; ++II) {
+		Instruction *I = &(cast<Instruction>(*II));
+		RemapInstruction(I, KVMap, RF_IgnoreMissingEntries);
+//		errs() << *I << "\n";	
+	}
+	
+	// replace indirection for add.i
+	for (Value::use_iterator i = kernelI->use_begin(), e = kernelI->use_end(); i != e; ++i) {
+		Instruction *ii = cast<Instruction>(*i);
+		BasicBlock::iterator iii(ii);
+		ReplaceInstWithValue(ii->getParent()->getInstList(), iii, kernelI);
+	}
+	
+	std::string Error;
+  raw_fd_ostream kernelOutput("kernel.ll", Error);
+	
+	kernelOutput << *kernelModule;
+
+//	errs() << *kernelModule;
+//
+// END GENERATE THE KERNEL
+//
+
+	
+//
+// REMOVE THE FOR LOOP
+//
+
+	forEnd->dropAllReferences();
+	forInc->dropAllReferences();
+	forCond->dropAllReferences();
+	forBody->dropAllReferences();
+
+	forEnd->eraseFromParent();	
+	forInc->eraseFromParent();	
+	forCond->eraseFromParent();
+	forBody->eraseFromParent();
+
+//	errs()<< *hostModule;
+	LPM.deleteLoopFromQueue(L);
+	
+//	forCond->removeFromParent();
+//	forBody->removeFromParent();
+//	forInc->removeFromParent();
+//	forEnd->removeFromParent();
+
+	
+//	errs() << "Exit block: \n" << *(L->getExitBlock());
+	
+	
+	// blk is a pointer to a BasicBlock instance
+//	for (BasicBlock::iterator i = blk->begin(), e = blk->end(); i != e; ++i)
+//		// The next statement works since operator<<(ostream&,...)
+//		// is overloaded for Instruction&
+//		errs() << *i << "\n";
+//	
+	
+//	
+//	// func is a pointer to a Function instance
+//	BasicBlock *exitBlock;
+//	for (Function::iterator i = hostFunction->begin(), e = hostFunction->end(); i != e; ++i) {
+//		// Print out the name of the basic block if it has one, and then the
+//		// number of instructions that it contains
+////		errs() << "Basic block (name=" << i->getName() << ") has "
+////		<< i->size() << " instructions." << " : \n" << *i << "\n";
+//		exitBlock = i;
 //	}
 //	
-//	tmp= V;
+//	// F is a pointer to a Function instance
+//	Instruction *firstInstruction = &(hostFunction->getEntryBlock().getInstList().front());	
+//	SmallPtrSet<Instruction*, 100> instrs;
 //	
-//	for (Value::use_iterator i = V->use_begin(), e = V->use_end(); i != e; ++i) {   
-//		Instruction *User = (Instruction*) (*i);
-//		//errs()<< *User << "\n";
-//		for (Value::use_iterator i2 = User->use_begin(), e2 = User->use_end(); i2 != e2; ++i2) {   
-//			Instruction *User2 = (Instruction*) (*i2);
-//			//errs()<< "	"<<*User2 << "\n";
-//			for (Value::use_iterator i3 = User2->use_begin(), e3 = User2->use_end(); i3 != e3; ++i3) {   
-//				Instruction *User3 = (Instruction*) (*i3);
-//				//errs()<< "	"<<*User3 << "\n";
-//				
+//	for (inst_iterator I = inst_begin(originalMain), E = inst_end(originalMain); I != E; ++I) {
+//		if(I->getName().endswith("GPU")) {
+//			Instruction *ourI = I->clone();
+//			if (I->hasName())
+//				ourI->setName(I->getName());
+//			
+//			ourI->insertBefore(firstInstruction);		
+//			VMap[&cast<Instruction>(*I)] = ourI;                // Add instruction map to value.
+//			
+//			for (Value::use_iterator i = I->use_begin(), e = I->use_end(); i != e; ++i) {
+//				instrs.insert(cast<Instruction>(*i));
+//				for (Value::use_iterator i2 = i->use_begin(), e2 = i->use_end(); i2 != e2; ++i2) {   
+//					instrs.insert(cast<Instruction>(*i2));					
+//					for (Value::use_iterator i3 = i2->use_begin(), e3 = i2->use_end(); i3 != e3; ++i3) {   
+//					instrs.insert(cast<Instruction>(*i3));
+//					}
+//				}
 //			}
 //		}
 //	}
-//	//theM->getGlobalList().push_back(V);
+////	Instruction *lastInstruction = &(hostFunction->getExitBlock().getInstList().back());	
 //	
-//	if(isNew) {
-//		//theM->getGlobalList().push_back(V);
+//	
+//	Instruction *lastInstruction = &(exitBlock->getInstList().back());	
+//	
+//	for (inst_iterator I = inst_begin(originalMain), E = inst_end(originalMain); I != E; ++I) {
+//		Instruction *II = &(cast<Instruction>(*I));
+//		if(instrs.count(II)) {
+//			Instruction *ourI = I->clone();
+//			if (I->hasName())
+//				ourI->setName(I->getName()+"GPU");
+//			ourI->insertBefore(lastInstruction);		
+//			VMap[&(cast<Instruction>(*I))] = ourI;                // Add instruction map to value.
+//		}
 //	}
-//}
-////	tmp->replaceAllUsesWith(tmp2);
-////	errs()<<  tmp->getName() <<"\n";
-//
-////GlobalVariable(const Type *Ty, bool isConstant, LinkageTypes& Linkage, Constant *Initializer = 0, const std::string &Name = "", Module* Parent = 0)
-////	for (Module::iterator F = myMod->begin(), e = myMod->end(); F != e; ++F) {
-//
-//
-//
-////		for (Function::iterator B = F->begin(), FE = F->end(); B != FE; ++B) {
-////			BasicBlock *Header = L->getHeader();
-////			for (BasicBlock::iterator I = B->begin(), BE = B->end(); I != BE; I++) {
-//////				errs() << *B;
-////				Header->getInstList().push_back(I);
-////			}
-////		}
+//	for (SmallPtrSet<Instruction*,100>::const_iterator I = instrs.begin(), E = instrs.end(); I != E; ++I) {
+//		RemapInstruction(&(cast<Instruction>(*VMap[*I])), VMap, RF_IgnoreMissingEntries);
+//		errs() << cast<Instruction>(*VMap[*I]) << "\n";	
 //	}
-
-
-// GlobalVariables cannot be added to another module because they are already in one
-// .setParent is private and cannot be used to change the parent of a GlobalVariable
-// .clone doesn't work on GlobalVariable
+//	
+//	for (Function::iterator i = hostFunction->begin(), e = hostFunction->end(); i != e; ++i) {
+//		// Print out the name of the basic block if it has one, and then the
+//		// number of instructions that it contains
+//				errs() << "Basic block (name=" << i->getName() << ") has "
+//				<< i->size() << " instructions." << " : \n" << *i << "\n";
+//	}
+	
+  return false;
+}
 
