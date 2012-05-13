@@ -9,13 +9,25 @@ entry:
   %2 = tail call i32 @llvm.ptx.read.tid.x() nounwind
   %mul.i = mul nsw i32 %1, %0
   %add.i = add nsw i32 %mul.i, %2
+  br label %for.body
+
+for.body:                                         ; preds = %entry
   %arrayidx = getelementptr inbounds float* %input, i32 %add.i
   %3 = load float* %arrayidx, align 4
-  %arrayidx2 = getelementptr inbounds float* %input, i32 %add.i
-  %4 = load float* %arrayidx2, align 4
-  %mul = fmul float %3, %4
-  %arrayidx3 = getelementptr inbounds float* %output, i32 %add.i
-  store float %mul, float* %arrayidx3, align 4
+  %cmp2 = fcmp ogt float %3, 1.000000e+01
+  br i1 %cmp2, label %if.then, label %if.end
+
+if.then:                                          ; preds = %for.body
+  %arrayidx3 = getelementptr inbounds float* %input, i32 %add.i
+  %4 = load float* %arrayidx3, align 4
+  %arrayidx4 = getelementptr inbounds float* %input, i32 %add.i
+  %5 = load float* %arrayidx4, align 4
+  %mul = fmul float %4, %5
+  %arrayidx5 = getelementptr inbounds float* %output, i32 %add.i
+  store float %mul, float* %arrayidx5, align 4
+  br label %if.end
+
+if.end:                                           ; preds = %if.then, %for.body
   ret void
 }
 

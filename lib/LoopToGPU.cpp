@@ -34,6 +34,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 
+
 using namespace llvm;
 
 namespace {
@@ -57,10 +58,6 @@ namespace {
       AU.addPreservedID(LCSSAID);
       AU.addRequired<ScalarEvolution>();
       AU.addPreserved<ScalarEvolution>();
-      // FIXME: Loop unroll requires LCSSA. And LCSSA requires dom info.
-      // If loop unroll does not preserve dom info then LCSSA pass on next
-      // loop will receive invalid dom info.
-      // For now, recreate dom info, if loop is unrolled.
       AU.addPreserved<DominatorTree>();
     }
   };
@@ -74,14 +71,15 @@ static RegisterPass<LoopToGPU> X("loop-to-gpu",
 bool LoopToGPU::runOnLoop(Loop *L, LPPassManager &LPM) {
 
 	BasicBlock *theHeader = L->getHeader();
-//	errs() << "The loop: F[" << theHeader->getParent()->getName() << "] Loop %" << theHeader->getName() << "\n";
+	errs() << "The loop: F[" << theHeader->getParent()->getName() << "] Loop %" << theHeader->getName() << "\n";
+	
 	Function *hostFunction = theHeader->getParent();
 	Module *hostModule = hostFunction->getParent(); errs() << *hostModule;
 	SMDiagnostic Err;
 	LLVMContext &Context = getGlobalContext();
 	Module* originalModule = llvm::ParseIRFile("../gpu.original.ll", Err, Context);
 	if (!originalModule) {
-//		Err.print("load problem: ", errs());
+		Err.print("load problem: ", errs());
 		return 1;
 	}
 	
@@ -177,8 +175,6 @@ bool LoopToGPU::runOnLoop(Loop *L, LPPassManager &LPM) {
 		}
 	}
 	
-//	errs() << *hostModule;
-	
 	//
 	// END MODULE-LEVEL CLONING
 	//
@@ -215,15 +211,21 @@ bool LoopToGPU::runOnLoop(Loop *L, LPPassManager &LPM) {
 	
 	// get the values withing the loop that have been initialized outside of it
 	std::vector<Value*> forInData;
-	for (BasicBlock::iterator i = forBody->begin(), e = forBody->end(); i != e; ++i) {
-		for (User::op_iterator v = i->op_begin(), ve = i->op_end(); v != ve; ++v) {
-			
-			if(Instruction *vi = dyn_cast<Instruction>(*v))
-				if(!L->contains(vi->getParent()) && vi != iteratorValue) {
-					forInData.push_back(vi);
+	
+	for (Function::iterator i = hostFunction->begin(), e = hostFunction->end(); i != e; ++i) {
+		BasicBlock *BB = i;
+		if(L->contains(BB) && BB != forInc && BB != forCond)  {
+			for (BasicBlock::iterator II = BB->begin(); II != BB->end(); ++II) {
+				for (User::op_iterator v = II->op_begin(), ve = II->op_end(); v != ve; ++v) {
+					if(Instruction *vi = dyn_cast<Instruction>(*v))
+						if(!L->contains(vi->getParent()) && vi != iteratorValue) {
+							forInData.push_back(vi);
+						}
 				}
+			}
 		}
 	}
+	
 	
 	std::sort(forInData.begin(), forInData.end());
 	std::vector<Value*>::iterator new_end = std::unique(forInData.begin(), forInData.end()); 
@@ -231,26 +233,12 @@ bool LoopToGPU::runOnLoop(Loop *L, LPPassManager &LPM) {
 	for (std::vector<Value*>::iterator it = forInData.begin(); it != new_end; ++it)
 	{
 		forInDataUnique.push_back(cast<Instruction>(*it));
-//		errs() << *cast<Instruction>(*it) << '\n';
 	}
 	
 	Instruction *oldTerminator = L->getLoopPredecessor()->getTerminator();
 	
 	LoadInst *loadForSize = new LoadInst(sizeValue, "", oldTerminator);	
 	forInDataUnique.push_back(loadForSize);
-	
-//	for (std::vector<Value*>::iterator it = forInDataUnique.begin(); it != forInDataUnique.end(); ++it)
-//	{
-//		errs() << *cast<Instruction>(*it) << '\n';
-//	}
-	
-//	
-//		for (Function::iterator i = gpuFunction->begin(), e = gpuFunction->end(); i != e; ++i) {
-//			// Print out the name of the basic block if it has one, and then the
-//			// number of instructions that it contains
-//					errs() << "Basic block (name=" << i->getName() << ") has "
-//					<< i->size() << " instructions." << " : \n" << *i << "\n";
-//		}
 	
 //	CallInst *callGpuInstr = 
 	CallInst::Create(gpuFunction, forInDataUnique, "", oldTerminator);
@@ -261,7 +249,6 @@ bool LoopToGPU::runOnLoop(Loop *L, LPPassManager &LPM) {
 		Instruction* I = i;
 		i++;
 		I->removeFromParent();
-//					errs() << *I << "\n";
 		I->insertBefore(oldTerminator);
 	}
 	
@@ -288,27 +275,80 @@ bool LoopToGPU::runOnLoop(Loop *L, LPPassManager &LPM) {
 	
 	ValueToValueMapTy KVMap;	
 	
-	for (BasicBlock::iterator I = forBody->begin(), e = forBody->end(); I != e; ++I) {
-		if(dyn_cast<TerminatorInst>(I))
-			continue;
-		Instruction *ourI = I->clone();
+	
+	
+	// CLONE FOR BODY
+	
+	// Loop over all of the basic blocks in the function, cloning them as
+  // appropriate.  
+	for (Function::iterator i = hostFunction->begin(), e = hostFunction->end(); i != e; ++i) {
+		const BasicBlock *BB = i;
 		
-		if (I->hasName())
-			ourI->setName(I->getName());
-		ourI->insertBefore(kernelTerminator);		
-		KVMap[&(cast<Instruction>(*I))] = ourI;                // Add instruction map to value.
+		if(L->contains(BB) && BB != forInc && BB != forCond) {
+			// Create a new basic block and copy instructions into it!
+			BasicBlock *CBB = CloneBasicBlock(BB, KVMap, "", kernelFunction);
+			// Add basic block mapping.
+			KVMap[BB] = CBB;
+		}
 	}
+
+	
+//	for (BasicBlock::iterator I = forBody->begin(), e = forBody->end(); I != e; ++I) {
+//		if(dyn_cast<TerminatorInst>(I))
+//			continue;
+//		Instruction *ourI = I->clone();
+//		
+//		if (I->hasName())
+//			ourI->setName(I->getName());
+//		ourI->insertBefore(kernelTerminator);		
+//		KVMap[&(cast<Instruction>(*I))] = ourI;                // Add instruction map to value.
+//	}
+	
+	
+	// END CLONE FOR BODY
+	
+	
 	
 	KVMap[iteratorValue] = kernelI; // map "i" to "add.i"
 	llvm::Function::arg_iterator arguments = kernelFunction->arg_begin();
 	KVMap[forInDataUnique[0]] = arguments++;
 	KVMap[forInDataUnique[1]] = arguments;
 	
-	for (BasicBlock::iterator II = kernelFunction->back().begin(), e = kernelFunction->back().end(); II != e; ++II) {
-		Instruction *I = &(cast<Instruction>(*II));
-		RemapInstruction(I, KVMap, RF_IgnoreMissingEntries);
-//		errs() << *I << "\n";	
+	BranchInst *bi = BranchInst::Create(cast<BasicBlock>(KVMap[forBody]));
+	Instruction *newTerminator = kernelTerminator->clone();
+	ReplaceInstWithInst(kernelTerminator, bi);
+	
+	for (Function::iterator BB = kernelFunction->begin(),
+			 BE = kernelFunction->end(); BB != BE; ++BB)
+    for (BasicBlock::iterator II = BB->begin(); II != BB->end(); ++II) 
+     	if (BranchInst *t = dyn_cast<BranchInst>(II)) 
+				if(t->getSuccessor(0) == forInc) {
+					KVMap[t] = newTerminator;
+					ReplaceInstWithInst(t, newTerminator);	
+					errs() << "\n\n\n";
+					for (User::op_iterator v = t->op_begin(), ve = t->op_end(); v != ve; ++v) {
+						errs() << cast<BasicBlock>(*v)
+//						cast<BasicBlock>(*v)->eraseFromParent();
+					}
+					errs() << "\n\n\n";					
+					break;
+				}
+
+  // Loop over all of the instructions in the function, fixing up operand
+  // references as we go.  This uses VMap to do all the hard work.
+  for (Function::iterator BB = kernelFunction->begin(),
+			 BE = kernelFunction->end(); BB != BE; ++BB) {
+    // Loop over all instructions, fixing each one as we find it...
+    for (BasicBlock::iterator II = BB->begin(); II != BB->end(); ++II) {
+      RemapInstruction(II, KVMap, RF_IgnoreMissingEntries);
+		}
 	}
+		
+//	for (BasicBlock::iterator II = kernelFunction->back().begin(), e = kernelFunction->back().end(); II != e; ++II) {
+//		Instruction *I = &(cast<Instruction>(*II));
+//		RemapInstruction(I, KVMap, RF_IgnoreMissingEntries);
+////		errs() << *I << "\n";	
+//	}
 	
 	// replace indirection for add.i
 	for (Value::use_iterator i = kernelI->use_begin(), e = kernelI->use_end(); i != e; ++i) {
@@ -319,10 +359,8 @@ bool LoopToGPU::runOnLoop(Loop *L, LPPassManager &LPM) {
 	
 	std::string Error;
   raw_fd_ostream kernelOutput("kernel.ll", Error);
-	
+	errs() << *kernelModule;	
 	kernelOutput << *kernelModule;
-
-//	errs() << *kernelModule;
 //
 // END GENERATE THE KERNEL
 //
@@ -342,25 +380,28 @@ bool LoopToGPU::runOnLoop(Loop *L, LPPassManager &LPM) {
 	forCond->eraseFromParent();
 	forBody->eraseFromParent();
 
-//	errs()<< *hostModule;
+// remove the loop from the pass manager
 	LPM.deleteLoopFromQueue(L);
 	
+  return false;
+}
+
 //	forCond->removeFromParent();
 //	forBody->removeFromParent();
 //	forInc->removeFromParent();
 //	forEnd->removeFromParent();
 
-	
+
 //	errs() << "Exit block: \n" << *(L->getExitBlock());
-	
-	
-	// blk is a pointer to a BasicBlock instance
+
+
+// blk is a pointer to a BasicBlock instance
 //	for (BasicBlock::iterator i = blk->begin(), e = blk->end(); i != e; ++i)
 //		// The next statement works since operator<<(ostream&,...)
 //		// is overloaded for Instruction&
 //		errs() << *i << "\n";
 //	
-	
+
 //	
 //	// func is a pointer to a Function instance
 //	BasicBlock *exitBlock;
@@ -422,7 +463,3 @@ bool LoopToGPU::runOnLoop(Loop *L, LPPassManager &LPM) {
 //				errs() << "Basic block (name=" << i->getName() << ") has "
 //				<< i->size() << " instructions." << " : \n" << *i << "\n";
 //	}
-	
-  return false;
-}
-
